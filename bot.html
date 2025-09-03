@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fincove - AI Voice Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="bot.css">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <div class="logo-icon">V</div>
+                    <span>Fincove AI</span>
+                </div>
+                <button class="new-chat-btn">+ New Chat</button>
+            </div>
+            <div class="past-conversations">
+                <p>Recent</p>
+                <!-- Past conversations will be listed here -->
+            </div>
+            <div class="sidebar-footer">
+                <a href="index.html" class="back-to-home">Back to Home</a>
+            </div>
+        </div>
+        <div class="chat-main">
+            <div class="chat-header">
+                <div id="status" class="connection-status">
+                    <div class="indicator connecting"></div>
+                    <span>Connecting...</span>
+                </div>
+            </div>
+            <div id="chatArea" class="chat-area">
+                 <div class="welcome-message">
+                    <div class="welcome-icon">&#128075;</div>
+                    <h1>Welcome to Fincove AI</h1>
+                    <p>Start a conversation by typing or using your voice below.</p>
+                </div>
+            </div>
+            <div id="loading" class="loading-indicator hidden">
+                <div class="dots">
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                </div>
+                <span>Maya is thinking...</span>
+            </div>
+            <div class="chat-input-area">
+                <div class="input-wrapper">
+                    <button id="micBtn" class="mic-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                    </button>
+                    <input type="text" id="textInput" placeholder="Ask by text anything...">
+                    <button id="sendBtn" class="send-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    </button>
+                </div>
+                <span id="voiceStatus" class="voice-status"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="authModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Secure Authentication</h2>
+                <p>Verify your identity to continue.</p>
+            </div>
+            <div id="phoneInput" class="modal-body">
+                <input type="tel" id="phone" placeholder="Enter 10-digit phone number">
+                <button onclick="sendOTP()" class="btn-primary">Send OTP</button>
+            </div>
+            <div id="otpInput" class="modal-body hidden">
+                <input type="text" id="otp" placeholder="Enter OTP">
+                <button onclick="verifyOTP()" class="btn-primary">Verify OTP</button>
+            </div>
+            <div id="authStatus" class="modal-footer"></div>
+        </div>
+    </div>
+
+    <audio id="audio" autoplay></audio>
+    <script src="bot.js"></script>
+</body>
+</html>

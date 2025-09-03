@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Edge TTS WebSocket UI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-900 flex flex-col items-center justify-center min-h-screen px-4">
+
+  <!-- Auth Modal -->
+  <div id="authModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[200]">
+    <div class="bg-white p-6 rounded-lg shadow-xl w-96">
+      <h2 class="text-xl font-bold mb-4">Authentication Required</h2>
+      <div id="phoneInput" class="space-y-4">
+        <input type="tel" id="phone" 
+          placeholder="Enter phone number (e.g., 9876543210)" 
+          pattern="[0-9]{10}"
+          title="Please enter a valid 10-digit phone number"
+          class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400">
+        <small class="text-gray-500">Enter 10 digit number without country code</small>
+        <button onclick="sendOTP()" class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition">Send OTP</button>
+      </div>
+      <div id="otpInput" class="hidden space-y-4">
+        <input type="text" id="otp" placeholder="Enter OTP" class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400">
+        <button onclick="verifyOTP()" class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition">Verify OTP</button>
+      </div>
+      <div id="authStatus" class="mt-4 text-sm"></div>
+    </div>
+  </div>
+
+  <div class="bg-white shadow-lg rounded-xl p-6 w-full max-w-xl text-center space-y-6">
+    <h1 class="text-4xl font-bold text-blue-600">Fincove's Voice Bot</h1>
+
+    <!-- Connection Status -->
+    <div id="status" class="text-sm font-medium text-gray-600">
+      🔌 Connecting...
+    </div>
+    <!-- Chat Area -->
+    <div id="chatArea" class="bg-gray-50 border border-gray-200 rounded-lg p-4 h-64 overflow-y-auto space-y-3 text-left">
+      <!-- Messages will be appended here -->
+    </div>
+
+    <!-- Input + Button -->
+    <div class="flex gap-2 items-center justify-center">
+      <button id="micBtn" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition flex items-center gap-2">
+      Speak
+      </button>
+      <span id="voiceStatus" class="text-sm text-gray-600">Click Speak to speak</span>
+      <input type="text" id="textInput">
+      <button onclick="sendText()">send</button>
+    </div>
+    <input type="hidden" id="textInput"> <!-- Keep hidden so sendText() still works -->
+
+    <!-- Loading animation -->
+    <div id="loading" class="hidden flex items-center justify-center">
+      <svg class="animate-spin h-6 w-6 text-blue-600" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+      </svg>
+      <span class="ml-2 text-blue-600 font-medium">Generating voice...</span>
+    </div>
+
+    <!-- Audio Element -->
+    <audio id="audio" autoplay class="w-full mt-2 relative z-[100]"></audio>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const loadingEl = document.getElementById("loading");
+    const textInput = document.getElementById("textInput");
+    const audio = document.getElementById("audio");
+    const button = document.getElementById("speak");
+
+    let mediaSource = new MediaSource();
+    let sourceBuffer;
+    let queue = [];
+    let isPlaying = false;
+
+    audio.src = URL.createObjectURL(mediaSource);
+
+    const ws = new WebSocket("ws://127.0.0.1:8000/ws/stream");
+    ws.binaryType = "arraybuffer";
+
+    ws.onopen = () => {
+      statusEl.textContent = "✅ Connected to server";
+      statusEl.className = "text-sm font-medium text-green-600";
+    };
+
+    ws.onclose = () => {
+      statusEl.textContent = "❌ Disconnected from server";
+      statusEl.className = "text-sm font-medium text-red-600";
+    };
+
+    ws.onerror = () => {
+      statusEl.textContent = "⚠️ WebSocket error";
+      statusEl.className = "text-sm font-medium text-yellow-600";
+    };
+
+    mediaSource.addEventListener("sourceopen", () => {
+      if (!sourceBuffer) {
+        sourceBuffer = mediaSource.addSourceBuffer("audio/mpeg");
+        sourceBuffer.mode = "sequence";
+        sourceBuffer.addEventListener("updateend", () => {
+          if (queue.length > 0 && !sourceBuffer.updating) {
+            sourceBuffer.appendBuffer(queue.shift());
+          }
+        });
+      }
+    });
+
+    ws.onmessage = (event) => {
+      loadingEl.classList.add("hidden");
+
+      if (sourceBuffer && (sourceBuffer.updating || queue.length > 0)) {
+        queue.push(event.data);
+      } else if (sourceBuffer) {
+        sourceBuffer.appendBuffer(event.data);
+      }
+    };
+
+    function sendText() {
+      const text = textInput.value.trim();
+      addMessage(text, "user");
+      if (!text || ws.readyState !== 1) return;
+
+      // Reset everything before new request
+      queue = [];
+      isPlaying = false;
+      loadingEl.classList.remove("hidden");
+
+      if (mediaSource.readyState === "ended" || mediaSource.readyState === "closed") {
+        mediaSource = new MediaSource();
+        audio.src = URL.createObjectURL(mediaSource);
+        mediaSource.addEventListener("sourceopen", () => {
+          if (!sourceBuffer) {
+            sourceBuffer = mediaSource.addSourceBuffer("audio/mpeg");
+            sourceBuffer.mode = "sequence";
+            sourceBuffer.addEventListener("updateend", () => {
+              if (queue.length > 0 && !sourceBuffer.updating) {
+                sourceBuffer.appendBuffer(queue.shift());
+              }
+            });
+          }
+        });
+      }
+
+      // Send text to server
+      ws.send(text);
+    }
+
+    textInput.addEventListener("keydown", function(event) {
+      if (event.key === "Enter") {
+        sendText();
+      }
+    });
+
+    // Authentication handling
+    const authModal = document.getElementById("authModal");
+    const phoneInput = document.getElementById("phoneInput");
+    const otpInput = document.getElementById("otpInput");
+    const authStatus = document.getElementById("authStatus");
+    let currentIntent = null;
+    let sessionId = null;
+
+    async function sendOTP() {
+      let phone = document.getElementById("phone").value;
+      // Format phone number to E.164
+      phone = phone.replace(/\D/g, ''); // Remove non-digits
+      if (!phone.startsWith('+')) {
+        if (phone.startsWith('91')) {
+          phone = '+' + phone;
+        } else {
+          phone = '+91' + phone;
+        }
+      }
+      try {
+        console.log(sessionId)
+        const response = await fetch("http://127.0.0.1:8000/auth/send-otp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ phone: phone, session_id : sessionId }),
+        });
+
+        if (response.ok) {
+          phoneInput.classList.add("hidden");
+          otpInput.classList.remove("hidden");
+          authStatus.textContent = "OTP sent successfully";
+          authStatus.className = "mt-4 text-sm text-green-600";
+        } else {
+          const error = await response.json();
+          authStatus.textContent = error.detail || "Failed to send OTP";
+          authStatus.className = "mt-4 text-sm text-red-600";
+        }
+      } catch (error) {
+        authStatus.textContent = "Error sending OTP";
+        authStatus.className = "mt-4 text-sm text-red-600";
+      }
+    }
+
+    async function verifyOTP() {
+      const phone = document.getElementById("phone").value;
+      const otp = document.getElementById("otp").value;
+      if (!sessionId) {
+        authStatus.textContent = "Session ID not found. Please refresh the page.";
+        authStatus.className = "mt-4 text-sm text-red-600";
+        return;
+      }
+      try {
+        const response = await fetch("http://127.0.0.1:8000/auth/verify-otp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ phone: phone, code: otp }),
+        });
+
+        if (response.ok) {
+          const responseData = await response.json();
+          if (responseData.verified) {
+            // Hide both input forms and clear them
+            phoneInput.classList.add("hidden");
+            otpInput.classList.add("hidden");
+            document.getElementById("phone").value = "";
+            document.getElementById("otp").value = "";
+            
+            // Hide the entire modal
+            authModal.classList.add("hidden");
+            
+            // Show success message
+            authStatus.textContent = "Phone verified successfully";
+            authStatus.className = "mt-4 text-sm text-green-600";
+            
+            // Notify server through websocket about verification
+            ws.send(JSON.stringify({
+              type: "verification_complete",
+              session_id: sessionId
+            }));
+            
+            // Resend the last query after successful verification
+            if (currentIntent && textInput.value) {
+              setTimeout(() => sendText(), 500); // Small delay to ensure server processes verification
+            }
+          }
+        } else {
+          const error = await response.json();
+          authStatus.textContent = error.detail || "Invalid OTP";
+          authStatus.className = "mt-4 text-sm text-red-600";
+        }
+      } catch (error) {
+        authStatus.textContent = "Error verifying OTP";
+        authStatus.className = "mt-4 text-sm text-red-600";
+      }
+    }
+
+    // Update WebSocket message handler to handle auth_required
+    ws.onmessage = (event) => {
+      if (event.data instanceof ArrayBuffer) {
+        // Handle audio data
+        loadingEl.classList.add("hidden");
+        if (sourceBuffer && (sourceBuffer.updating || queue.length > 0)) {
+          queue.push(event.data);
+        } else if (sourceBuffer) {
+          sourceBuffer.appendBuffer(event.data);
+        }
+      } else {
+        // Handle JSON messages
+        const message = JSON.parse(event.data);
+        if (message.type === "session") {
+          sessionId = message.session_id;
+          console.log("Session ID received:", sessionId);
+        } else if (message.type === "auth_required") {
+          sessionId = message.SID
+          currentIntent = message.intent;
+          authModal.classList.remove("hidden");
+          phoneInput.classList.remove("hidden");
+          otpInput.classList.add("hidden");
+          authStatus.textContent = message.message;
+          authStatus.className = "mt-4 text-sm text-blue-600";
+        } else if (message.type === "text") {
+          // Handle text response
+          console.log("Text response:", message.data);
+          addMessage(message.data, "Maya");
+        }
+      }
+    };
+
+    const micBtn = document.getElementById("micBtn");
+    const voiceStatus = document.getElementById("voiceStatus");
+
+    let recognition;
+    let isRecording = false;
+
+    if ('webkitSpeechRecognition' in window) {
+      recognition = new webkitSpeechRecognition();
+      recognition.lang = "en-IN"; // change to desired language
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        isRecording = true;
+        voiceStatus.textContent = "🎙 Listening...";
+        micBtn.classList.replace("bg-red-500", "bg-green-500");
+      };
+
+      recognition.onresult = (event) => {
+        let transcript = "";
+        for (let i = 0; i < event.results.length; ++i) {
+          transcript += event.results[i][0].transcript;
+        }
+        transcript = transcript.trim();
+        voiceStatus.textContent = "✅ " + transcript;
+        textInput.value = transcript; // set for sendText()
+        sendText();
+      };
+
+      recognition.onerror = (event) => {
+        voiceStatus.textContent = "⚠️ " + event.error;
+      };
+
+      recognition.onend = () => {
+        isRecording = false;
+        micBtn.classList.replace("bg-green-500", "bg-red-500");
+        if (!voiceStatus.textContent.startsWith("✅")) {
+          voiceStatus.textContent = "🎤 Click to speak";
+        }
+      };
+    } else {
+      voiceStatus.textContent = "❌ Speech Recognition not supported";
+      micBtn.disabled = true;
+    }
+
+    micBtn.addEventListener("click", () => {
+      if (isRecording) {
+        recognition.stop();
+      } else {
+        recognition.start();
+      }
+    });
+
+    const chatArea = document.getElementById("chatArea");
+
+    function addMessage(text, sender) {
+      const msgDiv = document.createElement("div");
+      msgDiv.classList.add("p-2", "rounded-lg", "max-w-[80%]", "whitespace-pre-wrap");
+
+      if (sender === "user") {
+        msgDiv.classList.add("bg-blue-500", "text-white", "self-end", "ml-auto");
+        msgDiv.textContent = "You: " + text;
+      } else {
+        msgDiv.classList.add("bg-gray-200", "text-gray-900", "self-start", "mr-auto");
+        msgDiv.textContent = "Maya: " + text;
+      }
+
+      chatArea.appendChild(msgDiv);
+      chatArea.scrollTop = chatArea.scrollHeight; // Auto-scroll
+    }
+
+  </script>
+</body>
+</html>
