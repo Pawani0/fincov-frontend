@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (ws && ws.readyState === WebSocket.OPEN) return;
         
         updateConnectionStatus("connecting");
-        ws = new WebSocket("ws://127.0.0.1:8000/ws/stream");
+        ws = new WebSocket("ws://34.0.5.211:8000/ws/stream");
         ws.binaryType = "arraybuffer";
 
         ws.onopen = () => updateConnectionStatus("connected");
@@ -283,7 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const response = await fetch("http://127.0.0.1:8000/auth/send-otp", {
+            const response = await fetch("http://34.0.5.211:8000/auth/send-otp", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ phone, session_id: sessionId }),
@@ -311,7 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         try {
-            const response = await fetch("http://127.0.0.1:8000/auth/verify-otp", {
+            const response = await fetch("http://34.0.5.211:8000/auth/verify-otp", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ phone, code: otp }),
